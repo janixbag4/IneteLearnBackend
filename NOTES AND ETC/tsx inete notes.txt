@@ -1,0 +1,32 @@
+inete_admin
+inete_admin1234567890
+
+
+import { API_URL } from '../inetelearn-backend/config/api'; // ← FIXED import path
+
+
+
+Install AsyncStorage
+
+npx expo install @react-native-async-storage/async-storage   -- works 
+
+
+If that doesn't work, try:
+
+npm install @react-native-async-storage/async-storage
+
+
+---------------
+# Stop your dev server first (Ctrl+C)
+
+# Install the package
+npx expo install @react-native-async-storage/async-storage
+
+# Clear cache and restart
+npx expo start --clear
+
+
+----------------------
+
+text to speech installation.
+npx expo install expo-speech

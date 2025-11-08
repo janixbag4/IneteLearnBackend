@@ -1,0 +1,31 @@
+@"
+# Dependencies
+node_modules/
+
+# Expo
+.expo/
+.expo-shared/
+dist/
+web-build/
+
+# Native
+android/
+ios/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS & Temp files
+.DS_Store
+*.tmp
+AppData/
+Local/
+Temp/
+
+# Environment
+.env
+.env.local
+"@ | Out-File -FilePath .gitignore -Encoding utf8 -NoNewline
