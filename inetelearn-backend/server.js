@@ -1,14 +1,44 @@
 // server.js
-require('dotenv').config();
+require('dotenv').config({ path: __dirname + '/.env' });
 const express = require('express');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
+const cloudinary = require('cloudinary').v2;
+const multer = require('multer');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cors());
+
+// Configure Cloudinary
+console.log('🔧 Configuring Cloudinary...');
+console.log('CLOUDINARY_CLOUD_NAME:', process.env.CLOUDINARY_CLOUD_NAME);
+console.log('CLOUDINARY_API_KEY:', process.env.CLOUDINARY_API_KEY ? '***' : 'MISSING');
+console.log('CLOUDINARY_API_SECRET:', process.env.CLOUDINARY_API_SECRET ? '***' : 'MISSING');
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+console.log('✅ Cloudinary configured');
+
+// Configure Multer for audio uploads
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'inete-learn-audio',
+    resource_type: 'auto',
+    allowed_formats: ['mp3', 'wav', 'ogg', 'm4a'],
+  },
+});
+
+const upload = multer({ storage: storage });
 
 // MongoDB Connection String (using environment variable)
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://inete_admin:2irW3RmFN864AVxK@cluster0.8i1sn.mongodb.net/IneteDB?retryWrites=true&w=majority&appName=Cluster0";
@@ -47,6 +77,12 @@ const dictionarySchema = new mongoose.Schema({
   exampleInete: String,
   exampleHiligaynon: String,
   exampleEnglish: String,
+  
+  // Audio fields
+  useCustomAudio: { type: Boolean, default: false }, // Toggle for custom audio vs TTS
+  customAudioUrl: String, // URL from Cloudinary
+  audioFileName: String,
+  audioUploadedBy: String, // Contributor who uploaded it
   
   // Contributor info
   contributorName: String,
@@ -224,6 +260,71 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// ============= AUDIO UPLOAD ROUTE =============
+
+// Upload audio file to Cloudinary (accepts base64-encoded audio data)
+app.post('/api/dictionary/upload-audio', async (req, res) => {
+  try {
+    console.log('📝 Upload endpoint hit');
+    
+    const { audioData, fileName, mimeType } = req.body;
+
+    console.log('Received:', { fileName, mimeType, audioDataSize: audioData?.length });
+
+    if (!audioData || !fileName) {
+      console.error('❌ Missing audioData or fileName');
+      return res.status(400).json({ message: 'Audio data and file name are required' });
+    }
+
+    // Convert base64 to buffer
+    const buffer = Buffer.from(audioData, 'base64');
+    
+    console.log('Buffer created, size:', buffer.length);
+
+    // Upload to Cloudinary using base64
+    try {
+      // Verify Cloudinary config
+      const config = cloudinary.config();
+      console.log('Cloudinary config check:', {
+        cloud_name: config.cloud_name || 'MISSING',
+        api_key: config.api_key ? 'EXISTS' : 'MISSING',
+        api_secret: config.api_secret ? 'EXISTS' : 'MISSING',
+      });
+
+      if (!config.cloud_name || !config.api_key || !config.api_secret) {
+        throw new Error('Cloudinary config is incomplete. Check .env variables.');
+      }
+
+      const result = await cloudinary.uploader.upload(`data:${mimeType};base64,${audioData}`, {
+        resource_type: 'auto',
+        folder: 'inete-learn-audio',
+        public_id: `${Date.now()}-${fileName.replace(/\.[^/.]+$/, '')}`,
+      });
+
+      const audioUrl = result.secure_url;
+      console.log('✅ Audio uploaded to Cloudinary:', audioUrl);
+
+      res.status(200).json({
+        message: 'Audio uploaded successfully',
+        audioUrl: audioUrl,
+        fileName: fileName,
+      });
+    } catch (cloudinaryError) {
+      console.error('❌ Cloudinary upload error:', cloudinaryError);
+      res.status(500).json({
+        message: 'Error uploading to Cloudinary',
+        error: cloudinaryError.message,
+      });
+    }
+  } catch (error) {
+    console.error('❌ Audio upload error:', error);
+    res.status(500).json({
+      message: 'Error uploading audio',
+      error: error.message,
+    });
+  }
+});
+
 
 // Add to your server.js
 
@@ -243,7 +344,10 @@ app.post('/api/dictionary/contribute', async (req, res) => {
       exampleHiligaynon,
       exampleEnglish,
       contributorName,
-      contributorEmail
+      contributorEmail,
+      useCustomAudio,
+      customAudioUrl,
+      audioFileName
     } = req.body;
 
     // Validation
@@ -275,6 +379,10 @@ app.post('/api/dictionary/contribute', async (req, res) => {
       exampleInete: exampleInete?.trim() || '',
       exampleHiligaynon: exampleHiligaynon?.trim() || '',
       exampleEnglish: exampleEnglish?.trim() || '',
+      useCustomAudio: useCustomAudio || false,
+      customAudioUrl: customAudioUrl || null,
+      audioFileName: audioFileName || null,
+      audioUploadedBy: contributorName?.trim() || 'Anonymous',
       contributorName: contributorName?.trim() || 'Anonymous',
       contributorEmail: contributorEmail?.trim() || '',
       createdAt: new Date()
