@@ -314,6 +314,39 @@ app.get('/api/dictionary/recent', async (req, res) => {
   }
 });
 
+// Upload audio file for dictionary word
+app.post('/api/dictionary/upload-audio', async (req, res) => {
+  try {
+    const { audioData, fileName, mimeType } = req.body;
+
+    // Validation
+    if (!audioData || !fileName) {
+      return res.status(400).json({ 
+        message: 'Audio data and filename are required' 
+      });
+    }
+
+    // For now, we'll store the base64 audio data as a data URL
+    // In production, you'd want to upload to a cloud service like Cloudinary or AWS S3
+    const audioUrl = `data:${mimeType || 'audio/mpeg'};base64,${audioData}`;
+
+    console.log('✅ Audio uploaded:', fileName);
+    
+    res.status(201).json({ 
+      message: 'Audio uploaded successfully',
+      audioUrl: audioUrl,
+      fileName: fileName
+    });
+
+  } catch (error) {
+    console.error('Audio upload error:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message 
+    });
+  }
+});
+
 // Add this after your signin route in server.js
 
 // Update user profile
